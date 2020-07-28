@@ -10,46 +10,59 @@
 # For an easy understanding of the code functionality please read the following articles.
 
 # If you use parts of this code please cite the following articles:
-#@article{Mocanu2018SET,
+# @article{Mocanu2018SET,
 #  author =        {Mocanu, Decebal Constantin and Mocanu, Elena and Stone, Peter and Nguyen, Phuong H. and Gibescu, Madeleine and Liotta, Antonio},
 #  journal =       {Nature Communications},
 #  title =         {Scalable Training of Artificial Neural Networks with Adaptive Sparse Connectivity inspired by Network Science},
 #  year =          {2018},
 #  doi =           {10.1038/s41467-018-04316-3}
-#}
+# }
 
-#@Article{Mocanu2016XBM,
-#author="Mocanu, Decebal Constantin and Mocanu, Elena and Nguyen, Phuong H. and Gibescu, Madeleine and Liotta, Antonio",
-#title="A topological insight into restricted Boltzmann machines",
-#journal="Machine Learning",
-#year="2016",
-#volume="104",
-#number="2",
-#pages="243--270",
-#doi="10.1007/s10994-016-5570-z",
-#url="https://doi.org/10.1007/s10994-016-5570-z"
-#}
+# @Article{Mocanu2016XBM,
+# author="Mocanu, Decebal Constantin and Mocanu, Elena and Nguyen, Phuong H. and Gibescu, Madeleine and Liotta, Antonio",
+# title="A topological insight into restricted Boltzmann machines",
+# journal="Machine Learning",
+# year="2016",
+# volume="104",
+# number="2",
+# pages="243--270",
+# doi="10.1007/s10994-016-5570-z",
+# url="https://doi.org/10.1007/s10994-016-5570-z"
+# }
 
-#@phdthesis{Mocanu2017PhDthesis,
-#title = "Network computations in artificial intelligence",
-#author = "D.C. Mocanu",
-#year = "2017",
-#isbn = "978-90-386-4305-2",
-#publisher = "Eindhoven University of Technology",
-#}
+# @phdthesis{Mocanu2017PhDthesis,
+# title = "Network computations in artificial intelligence",
+# author = "D.C. Mocanu",
+# year = "2017",
+# isbn = "978-90-386-4305-2",
+# publisher = "Eindhoven University of Technology",
+# }
 
 from __future__ import division
 from __future__ import print_function
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
+
+# from keras.utils.generic_utils import get_custom_objects
+#
+# def swish(x, beta = 1):
+#     return x * K.sigmoid(beta * x)
+#
+# get_custom_objects().update({'swish': Activation(swish)})
+
 from keras import optimizers
+import tensorflow as tf
 import numpy as np
+import gc
 from keras import backend as K
-#Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
-from keras_contrib.layers.advanced_activations import SReLU
-from keras.datasets import cifar10
+from keras.datasets import cifar10 as dataset
+
+dataset_name = "cifar10"
+activation_function = "softplus"
+
 from keras.utils import np_utils
+
 
 class Constraint(object):
 
@@ -58,6 +71,7 @@ class Constraint(object):
 
     def get_config(self):
         return {}
+
 
 class MaskWeights(Constraint):
 
@@ -83,32 +97,34 @@ def find_last_pos(array, value):
     return array.shape[0] - idx
 
 
-def createWeightsMask(epsilon,noRows, noCols):
+def createWeightsMask(epsilon, noRows, noCols):
     # generate an Erdos Renyi sparse weights mask
     mask_weights = np.random.rand(noRows, noCols)
-    prob = 1 - (epsilon * (noRows + noCols)) / (noRows * noCols)  # normal tp have 8x connections
+    prob = 1 - (epsilon * (noRows + noCols)) / (
+                noRows * noCols)  # normal tp have 8x connections - sparsity level, change epsilon
+    # print("Sparsity: " + str(prob))
     mask_weights[mask_weights < prob] = 0
     mask_weights[mask_weights >= prob] = 1
     noParameters = np.sum(mask_weights)
-    print ("Create Sparse Matrix: No parameters, NoRows, NoCols ",noParameters,noRows,noCols)
-    return [noParameters,mask_weights]
+    print("Create Sparse Matrix: No parameters, NoRows, NoCols ", noParameters, noRows, noCols)
+    return [noParameters, mask_weights]
 
 
 class SET_MLP_CIFAR10:
     def __init__(self):
         # set model parameters
-        self.epsilon = 20 # control the sparsity level as discussed in the paper
-        self.zeta = 0.3 # the fraction of the weights removed
-        self.batch_size = 100 # batch size
-        self.maxepoches = 1000 # number of epochs
-        self.learning_rate = 0.01 # SGD learning rate
-        self.num_classes = 10 # number of classes
-        self.momentum=0.9 # SGD momentum
+        self.epsilon = 10  # control the sparsity level as discussed in the paper - default:20
+        self.zeta = 0.3  # the fraction of the weights removed
+        self.batch_size = 100  # batch size
+        self.maxepoches = 500  # number of epochs, default 1000, 500 should be fine as well
+        self.learning_rate = 0.01  # SGD learning rate
+        self.num_classes = 10  # number of classes
+        self.momentum = 0.9  # SGD momentum
 
         # generate an Erdos Renyi sparse weights mask for each layer
-        [self.noPar1, self.wm1] = createWeightsMask(self.epsilon,32 * 32 *3, 4000)
-        [self.noPar2, self.wm2] = createWeightsMask(self.epsilon,4000, 1000)
-        [self.noPar3, self.wm3] = createWeightsMask(self.epsilon,1000, 4000)
+        [self.noPar1, self.wm1] = createWeightsMask(self.epsilon, 32 * 32 * 3, 4000)
+        [self.noPar2, self.wm2] = createWeightsMask(self.epsilon, 4000, 1000)
+        [self.noPar3, self.wm3] = createWeightsMask(self.epsilon, 1000, 4000)
 
         # initialize layers weights
         self.w1 = None
@@ -127,43 +143,51 @@ class SET_MLP_CIFAR10:
         # train the SET-MLP model
         self.train()
 
-
     def create_model(self):
-
         # create a SET-MLP model for CIFAR10 with 3 hidden layers
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
-        self.model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1))
-        self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
+        self.model.add(Dense(4000, name="sparse_1", kernel_constraint=MaskWeights(self.wm1), weights=self.w1, activation=activation_function))
+        # self.model.add(tf.nn.swish(features=))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
-        self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
+        self.model.add(Dense(1000, name="sparse_2", kernel_constraint=MaskWeights(self.wm2), weights=self.w2, activation=activation_function))
+        # self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
-        self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
+        self.model.add(Dense(4000, name="sparse_3", kernel_constraint=MaskWeights(self.wm3), weights=self.w3, activation=activation_function))
+        # self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(self.num_classes, name="dense_4",weights=self.w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
+        self.model.add(Dense(self.num_classes, name="dense_4",
+                             weights=self.w4))  # please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
         self.model.add(Activation('softmax'))
 
-    def rewireMask(self,weights, noWeights):
+    def rewireMask(self, weights, noWeights):
         # rewire weight matrix
 
         # remove zeta largest negative and smallest positive weights
         values = np.sort(weights.ravel())
         firstZeroPos = find_first_pos(values, 0)
         lastZeroPos = find_last_pos(values, 0)
-        largestNegative = values[int((1-self.zeta) * firstZeroPos)]
-        smallestPositive = values[int(min(values.shape[0] - 1, lastZeroPos +self.zeta * (values.shape[0] - lastZeroPos)))]
-        rewiredWeights = weights.copy();
-        rewiredWeights[rewiredWeights > smallestPositive] = 1;
-        rewiredWeights[rewiredWeights < largestNegative] = 1;
-        rewiredWeights[rewiredWeights != 1] = 0;
+        largestNegative = values[int((1 - self.zeta) * firstZeroPos)]
+        smallestPositive = values[
+            int(min(values.shape[0] - 1, lastZeroPos + self.zeta * (values.shape[0] - lastZeroPos)))]
+        rewiredWeights = weights.copy()
+        rewiredWeights[rewiredWeights > smallestPositive] = 1
+        rewiredWeights[rewiredWeights < largestNegative] = 1
+        rewiredWeights[rewiredWeights != 1] = 0
         weightMaskCore = rewiredWeights.copy()
 
         # add zeta random weights
         nrAdd = 0
         noRewires = noWeights - np.sum(rewiredWeights)
+
+
         while (nrAdd < noRewires):
+            # emptyI, emptyJ = np.where(rewiredWeights == 0)
+            #
+            # i = np.random.choice(emptyI)
+            # j = np.random.choice(np.where(rewiredWeights[i] == 0)[0])
+
+
             i = np.random.randint(0, rewiredWeights.shape[0])
             j = np.random.randint(0, rewiredWeights.shape[1])
             if (rewiredWeights[i, j] == 0):
@@ -179,9 +203,9 @@ class SET_MLP_CIFAR10:
         self.w3 = self.model.get_layer("sparse_3").get_weights()
         self.w4 = self.model.get_layer("dense_4").get_weights()
 
-        self.wSRelu1 = self.model.get_layer("srelu1").get_weights()
-        self.wSRelu2 = self.model.get_layer("srelu2").get_weights()
-        self.wSRelu3 = self.model.get_layer("srelu3").get_weights()
+        # self.wSRelu1 = self.model.get_layer("srelu1").get_weights()
+        # self.wSRelu2 = self.model.get_layer("srelu2").get_weights()
+        # self.wSRelu3 = self.model.get_layer("srelu3").get_weights()
 
         [self.wm1, self.wm1Core] = self.rewireMask(self.w1[0], self.noPar1)
         [self.wm2, self.wm2Core] = self.rewireMask(self.w2[0], self.noPar2)
@@ -194,9 +218,9 @@ class SET_MLP_CIFAR10:
     def train(self):
 
         # read CIFAR10 data
-        [x_train,x_test,y_train,y_test]=self.read_data()
+        [x_train, x_test, y_train, y_test] = self.read_data()
 
-        #data augmentation
+        # data augmentation
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
             samplewise_center=False,  # set each sample mean to 0
@@ -213,38 +237,47 @@ class SET_MLP_CIFAR10:
         self.model.summary()
 
         # training process in a for loop
-        self.accuracies_per_epoch=[]
-        for epoch in range(0,self.maxepoches):
-
+        self.loss_per_epoch = []
+        self.acc_per_epoch = []
+        self.val_loss_per_epoch = []
+        self.val_acc_per_epoch = []
+        for epoch in range(0, self.maxepoches):
             sgd = optimizers.SGD(lr=self.learning_rate, momentum=self.momentum)
             self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
             historytemp = self.model.fit_generator(datagen.flow(x_train, y_train,
-                                             batch_size=self.batch_size),
-                                steps_per_epoch=x_train.shape[0]//self.batch_size,
-                                epochs=epoch,
-                                validation_data=(x_test, y_test),
-                                 initial_epoch=epoch-1)
+                                                                batch_size=self.batch_size),
+                                                   steps_per_epoch=x_train.shape[0] // self.batch_size,
+                                                   epochs=epoch,
+                                                   validation_data=(x_test, y_test),
+                                                   initial_epoch=epoch - 1)
+            # print(historytemp.history)
+            self.loss_per_epoch.append(historytemp.history['loss'][0])
+            self.acc_per_epoch.append(historytemp.history['accuracy'][0])
+            self.val_loss_per_epoch.append(historytemp.history['val_loss'][0])
+            self.val_acc_per_epoch.append(historytemp.history['val_accuracy'][0])
 
-            self.accuracies_per_epoch.append(historytemp.history['val_acc'][0])
-
-            #ugly hack to avoid tensorflow memory increase for multiple fit_generator calls. Theano shall work more nicely this but it is outdated in general
+            # ugly hack to avoid tensorflow memory increase for multiple fit_generator calls. Theano shall work more nicely this but it is outdated in general
             self.weightsEvolution()
+            gc.collect()
             K.clear_session()
             self.create_model()
 
-        self.accuracies_per_epoch=np.asarray(self.accuracies_per_epoch)
+        self.loss_per_epoch = np.asarray(self.loss_per_epoch)
+        self.acc_per_epoch = np.asarray(self.acc_per_epoch)
+        self.val_loss_per_epoch = np.asarray(self.val_loss_per_epoch)
+        self.val_acc_per_epoch = np.asarray(self.val_acc_per_epoch)
 
     def read_data(self):
 
-        #read CIFAR10 data
-        (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+        # read CIFAR10 data
+        (x_train, y_train), (x_test, y_test) = dataset.load_data()
         y_train = np_utils.to_categorical(y_train, self.num_classes)
         y_test = np_utils.to_categorical(y_test, self.num_classes)
         x_train = x_train.astype('float32')
         x_test = x_test.astype('float32')
 
-        #normalize data
+        # normalize data
         xTrainMean = np.mean(x_train, axis=0)
         xTtrainStd = np.std(x_train, axis=0)
         x_train = (x_train - xTrainMean) / xTtrainStd
@@ -252,15 +285,39 @@ class SET_MLP_CIFAR10:
 
         return [x_train, x_test, y_train, y_test]
 
+
 if __name__ == '__main__':
+    K.clear_session()
+    gc.collect()
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Restrict TensorFlow to only use the fourth GPU
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
     # create and run a SET-MLP model on CIFAR10
-    model=SET_MLP_CIFAR10()
+    SET = SET_MLP_CIFAR10()
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_mlp_srelu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
+    # if not os.path.exists("results/" + dataset_name + "/" + activation_function + "/set_mlp_e" + str(SET.epsilon) + "_loss.txt"):
+    np.savetxt("results/" + dataset_name + "/" + activation_function + "/set_mlp_e" + str(SET.epsilon) + "_loss.txt", np.asarray(SET.loss_per_epoch))
+    np.savetxt("results/" + dataset_name + "/" + activation_function + "/set_mlp_e" + str(SET.epsilon) + "_acc.txt", np.asarray(SET.acc_per_epoch))
+    np.savetxt("results/" + dataset_name + "/" + activation_function + "/set_mlp_e" + str(SET.epsilon) + "_val_loss.txt", np.asarray(SET.val_loss_per_epoch))
+    np.savetxt("results/" + dataset_name + "/" + activation_function + "/set_mlp_e" + str(SET.epsilon) + "_val_acc.txt", np.asarray(SET.val_acc_per_epoch))
 
-
-
-
+    # Cleaning up is needed due to Python memory leak
+    del SET
+    gc.collect()
+    K.clear_session()
+    tf.compat.v1.reset_default_graph()
+    print("Done")

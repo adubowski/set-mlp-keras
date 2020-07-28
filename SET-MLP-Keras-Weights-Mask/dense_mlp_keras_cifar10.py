@@ -41,20 +41,33 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
 from keras import optimizers
+import tensorflow as tf
 import numpy as np
+import gc
 from keras import backend as K
-#Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
-from keras_contrib.layers.advanced_activations import SReLU
-from keras.datasets import cifar10
+
+from keras.utils.generic_utils import get_custom_objects
+
+def swish(x, beta = 1):
+    return x * K.sigmoid(beta * x)
+
+get_custom_objects().update({'swish': Activation(swish)})
+
+from keras.datasets import cifar10 as dataset
+
+dataset_name = "cifar10"
+activation_function = "swish"
+
+from keras.utils import np_utils
 from keras.utils import np_utils
 
 
 class MLP_CIFAR10:
     def __init__(self):
         # set model parameters
-        self.epsilon = 20 # control the sparsity level as discussed in the paper
+        # self.epsilon = 20 # control the sparsity level as discussed in the paper
         self.batch_size = 100 # batch size
-        self.maxepoches = 1000 # number of epochs
+        self.maxepoches = 1 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
         self.num_classes = 10 # number of classes
         self.momentum=0.9 # SGD momentum
@@ -83,13 +96,13 @@ class MLP_CIFAR10:
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
         self.model.add(Dense(4000, name="dense_1", weights=self.w1))
-        self.model.add(SReLU(name="srelu1", weights=self.wSRelu1))
+        self.model.add(Activation(activation_function))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1000, name="dense_2", weights=self.w2))
-        self.model.add(SReLU(name="srelu2", weights=self.wSRelu2))
+        self.model.add(Activation(activation_function))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(4000, name="dense_3", weights=self.w3))
-        self.model.add(SReLU(name="srelu3", weights=self.wSRelu3))
+        self.model.add(Activation(activation_function))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4))
         self.model.add(Activation('softmax'))
@@ -125,13 +138,18 @@ class MLP_CIFAR10:
                                                validation_data=(x_test, y_test),
                                                )
 
-        self.accuracies_per_epoch = historytemp.history['val_acc']
-
+        # self.accuracies_per_epoch = historytemp.history['val_acc']
+        self.loss_per_epoch = historytemp.history['loss']
+        self.acc_per_epoch = historytemp.history['accuracy']
+        self.val_loss_per_epoch = historytemp.history['val_loss']
+        self.val_acc_per_epoch = historytemp.history['val_accuracy']
+        gc.collect()
+        K.clear_session()
 
     def read_data(self):
 
         #read CIFAR10 data
-        (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+        (x_train, y_train), (x_test, y_test) = dataset.load_data()
         y_train = np_utils.to_categorical(y_train, self.num_classes)
         y_test = np_utils.to_categorical(y_test, self.num_classes)
         x_train = x_train.astype('float32')
@@ -147,13 +165,36 @@ class MLP_CIFAR10:
 
 if __name__ == '__main__':
 
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Restrict TensorFlow to only use the fourth GPU
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+
     # create and run a dense MLP model on CIFAR10
     model=MLP_CIFAR10()
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/dense_mlp_srelu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/cifar10/relu/dense_mlp_loss.txt", np.asarray(model.loss_per_epoch))
+    np.savetxt("results/cifar10/relu/dense_mlp_acc.txt", np.asarray(model.acc_per_epoch))
+    np.savetxt("results/cifar10/relu/dense_mlp_val_loss.txt", np.asarray(model.val_loss_per_epoch))
+    np.savetxt("results/cifar10/relu/dense_mlp_val_acc.txt", np.asarray(model.val_acc_per_epoch))
 
+    # Cleaning up is needed due to Python memory leak
+    del model
+    gc.collect()
+    K.clear_session()
+    tf.compat.v1.reset_default_graph()
 
 
 

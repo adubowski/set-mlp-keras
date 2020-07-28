@@ -37,21 +37,30 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+vars = {"acc": "Accuracy", "val_acc": "Accuracy on the validation set", "loss": "Loss", "val_loss": "Loss on the validation set"}
+functions = {"relu": "ReLU", "sigmoid": "Sigmoid", "tanh": "Tanh", "selu": "SELU", "softsign": "Softsign", "softplus": "Softplus", "srelu": "SReLU"}
+for function in functions.keys():
+    for var in vars.keys():
+        plt.title(functions[function] + " Performance")
+        plt.xlabel("Epochs[#]")
+        plt.ylabel("CIFAR10\n" + vars[var] + " [%]")
 
-ev=np.loadtxt("results/set_mlp_srelu_sgd_cifar10_acc.txt")
-fix=np.loadtxt("results/fixprob_mlp_srelu_sgd_cifar10_acc.txt")
-dense=np.loadtxt("results/dense_mlp_srelu_sgd_cifar10_acc.txt")
+        eps10=np.loadtxt("results/cifar10/" + function + "/set_mlp_e10_" + var + ".txt")
+        eps20=np.loadtxt("results/cifar10/" + function + "/set_mlp_e20_" + var + ".txt")
+        eps50=np.loadtxt("results/cifar10/" + function + "/set_mlp_e50_" + var + ".txt")
+        eps100=np.loadtxt("results/cifar10/" + function + "/set_mlp_e100_" + var + ".txt")
+        eps500=np.loadtxt("results/cifar10/" + function + "/set_mlp_e500_" + var + ".txt")
+        dense=np.loadtxt("results/cifar10/" + function + "/set_mlp_dense_" + var + ".txt")
 
-plt.xlabel("Epochs[#]")
-plt.ylabel("CIFAR10\nAccuracy [%]")
+        plt.plot(eps10*100,'r',label="Sparsity 98.85%")
+        plt.plot(eps20*100,'b',label="Sparsity 97.12%")
+        plt.plot(eps50*100,'g',label="Sparsity 94.25%")
+        plt.plot(eps100*100,'m',label="Sparsity 88.50%")
+        plt.plot(eps500*100,'c',label="Sparsity 71.2%")
+        plt.plot(dense*100,'k',label="Dense network")
 
-
-plt.plot(dense*100,'b',label="MLP")
-plt.plot(fix*100,'y',label="MLP$_{FixProb}$")
-plt.plot(ev*100,'r',label="SET-MLP")
-
-plt.legend(loc=4)
-plt.grid(True)
-plt.tight_layout()
-plt.savefig("cifar10_models_performance.pdf")
-plt.close()
+        plt.legend(loc=4, prop={'size': 8})
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig("results/cifar10/" + function + "/performance_" + function + "_" + var + ".pdf")
+        plt.close()
