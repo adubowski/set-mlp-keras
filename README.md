@@ -11,42 +11,6 @@
 * However, due the fact that the weights are stored in the standard Keras format (dense matrices), this implementation can not scale properly.  
 * If you would like to build an SET-MLP with over 100000 neurons, please use Implementation 2.
 
-###### Implementation 2 - SET-MLP using just sparse data structures from pure Python 3 (SET-MLP-Sparse-Python-Data-Structures)
-
-* Proof of concept implementation of Sparse Evolutionary Training (SET) for Multi Layer Perceptron (MLP) on lung dataset using Python, SciPy sparse data structures, and (optionally) Cython.
-* This implementation was developed just in the last stages of the reviewing process, and we are briefly discussing about it in the "Peer Review File" which can be downloaded from Reference 1 website.   
-* This implementation can be used to create SET-MLP with hundred of thousands of neurons on a standard laptop. It was made starting from the vanilla fully connected MLP implementation of Ritchie Vink (https://www.ritchievink.com/) and we would like to acknowledge his work and thank him. Also, we would like to thank Thomas Hagebols for analyzing the performance of SciPy sparse matrix operations. We thank also to Amarsagar Reddy Ramapuram Matavalam from Iowa State University (amar@iastate.edu), who provided us a faster implementation of the "weightsEvolution" method, after the initial release of this code.
-* If you would like to try large SET-MLP models, below are the expected running times measured on my laptop (16 GB RAM) using the original implementation of the "weightsEvolution" method. I have used exactly the model and the dataset from the file "set_mlp_sparse_data_structures.py" and I just changed the number of hidden neurons per layer:
-    - 3,000 neurons/hidden layer, 12,317 neurons in total    
-    0.3 minutes/epoch
-    - 30,000 neurons/hidden layer, 93,317 neurons in total  
-      3 minutes/epoch
-    - 300,000 neurons/hidden layer, 903,317 neurons in total  
-      49 minutes/epoch
-    - 600,000 neurons/hidden layer, 1,803,317 neurons in total  
-      112 minutes/epoch
-* If you would like to try out SET-MLP with various activation functions, optimization methods and so on (in the detriment of scalability) please use Implementation 1.  
-
-###### Implementation 3 - SET-RBM using just sparse data structures from pure Python 3 (SET-RBM-Sparse-Python-Data-Structures)
-
-* Proof of concept implementation of Sparse Evolutionary Training (SET) for Restricted Boltzmann Machine (RBM) on COIL20 dataset using Python, SciPy sparse data structures, and (optionally) Cython.  
-* This implementation can be used to create SET-RBM with hundred of thousands of neurons on a standard laptop and was developed just before the publication of Reference 1.
-
-###### Implementation 4 - IJCAI 2019 tutorial - light hands-on experience code (Tutorial-IJCAI-2019-Scalable-Deep-Learning) 
-
-* Tutorial details - "Scalable Deep Learning: from theory to practice" 
-https://sites.google.com/view/scalable-deep-learning-ijcai19
-* The code is based on Implementation 2 of SET-MLP to which Dropout is added.
-* In the "Pretrained_results" folder there is a nice animation "fashion_mnist_connections_evolution_per_input_pixel_rand0.gif" of the input layer connectivity evolution during training.    
-
-###### Implementation 5 - ECMLPKDD 2019 tutorial - light hands-on experience code (Tutorial-ECMLPKDD-2019-Scalable-Deep-Learning) 
-
-* Tutorial details - "Scalable Deep Learning: from theory to practice" 
-https://sites.google.com/view/sdl-ecmlpkdd-2019-tutorial
-* The code is based on Implementation 2 of SET-MLP to which Dropout is added.
-* In the "Pretrained_results" folder there is a nice animation "fashion_mnist_connections_evolution_per_input_pixel_rand0.gif" of the input layer connectivity evolution during training.    
-
-
 ###### References
 
 For an easy understanding of these implementations please read the following articles. Also, if you use parts of this code in your work, please cite the corresponding ones:
